@@ -27,5 +27,6 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install python3 python3-pip -y
 sudo apt install google-chrome-stable -y
 sudo apt install chromium-chromedriver -y
-pip3 instapython3 mr_blade_stalker.
+chmod +x Ddos.py
 pip3 install requests tls-client selenium
+python3 Ddos.py
